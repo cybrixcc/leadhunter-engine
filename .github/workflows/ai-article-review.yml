@@ -1,0 +1,223 @@
+name: AI Article Review
+
+on:
+  workflow_call:
+    inputs:
+      config_path:
+        description: 'Path to config.yml in the calling repo'
+        required: false
+        default: './config.yml'
+        type: string
+      article_paths:
+        description: 'Glob patterns for blog article files to watch (comma-separated)'
+        required: false
+        default: 'src/app/blog/**'
+        type: string
+      review_rules_path:
+        description: 'Path to article review rules file in calling repo'
+        required: false
+        default: '.github/article-review-rules.md'
+        type: string
+      model:
+        description: 'Claude model to use for review'
+        required: false
+        default: 'claude-sonnet-4-6'
+        type: string
+      max_rounds:
+        description: 'Maximum review rounds per PR'
+        required: false
+        default: '5'
+        type: string
+    secrets:
+      ANTHROPIC_API_KEY:
+        required: true
+      WORKFLOW_TOKEN:
+        required: true
+
+  pull_request:
+    types: [opened, synchronize, ready_for_review]
+    paths:
+      - 'src/app/blog/**'
+
+concurrency:
+  group: ai-article-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  actions: read
+  id-token: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: "!github.event.pull_request.draft"
+
+    steps:
+      - name: Check for article changes
+        id: changes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          REPO=${{ github.repository }}
+          FILES=$(gh api "repos/${REPO}/pulls/${PR_NUMBER}/files" --paginate --jq '.[].filename')
+          if [ -z "$FILES" ]; then
+            echo "should_review=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          HAS_ARTICLE="false"
+          while IFS= read -r file; do
+            case "$file" in
+              src/app/blog/*/page.tsx|src/app/blog/*/opengraph-image.tsx)
+                HAS_ARTICLE="true"
+                break
+                ;;
+            esac
+          done <<< "$FILES"
+          if [ "$HAS_ARTICLE" = "false" ]; then
+            echo "should_review=false" >> $GITHUB_OUTPUT
+          else
+            echo "should_review=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Checkout PR branch
+        if: steps.changes.outputs.should_review == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 20
+          token: ${{ secrets.WORKFLOW_TOKEN }}
+
+      - name: Checkout engine
+        if: steps.changes.outputs.should_review == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: cybrixcc/leadhunter-engine
+          path: .engine
+          ref: main
+
+      - name: Fetch context files from master
+        if: steps.changes.outputs.should_review == 'true'
+        run: |
+          git fetch origin master
+          # Fetch any context files that exist in master
+          for f in .github/article-review-rules.md docs/GUIDE_BLOG.md docs/GUIDE_VISUALS.md docs/GUIDE_LINKING.md CONTENT_PLAN.md; do
+            git checkout origin/master -- "$f" 2>/dev/null || true
+          done
+
+      - name: Check review rounds
+        if: steps.changes.outputs.should_review == 'true'
+        id: round
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          PR_NUMBER=${{ github.event.pull_request.number }}
+          REPO=${{ github.repository }}
+          MAX_ROUNDS="${{ inputs.max_rounds || '5' }}"
+          COMMENTS=$(gh api "repos/${REPO}/issues/${PR_NUMBER}/comments" --paginate --jq '.[].body' 2>/dev/null || echo "")
+          ROUND_COUNT=$(echo "$COMMENTS" | grep -c '<!-- AI-ARTICLE-REVIEW-ROUND:' || true)
+          if [ "$ROUND_COUNT" -ge "$MAX_ROUNDS" ]; then
+            echo "should_review=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          if echo "$COMMENTS" | grep -q "ALL_CLEAR:${HEAD_SHA}"; then
+            echo "should_review=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          CURRENT_ROUND=$((ROUND_COUNT + 1))
+          echo "should_review=true" >> $GITHUB_OUTPUT
+          echo "current_round=$CURRENT_ROUND" >> $GITHUB_OUTPUT
+
+      - name: Load config
+        if: steps.round.outputs.should_review == 'true'
+        run: |
+          CONFIG="${{ inputs.config_path || './config.yml' }}"
+          if [ -f "$CONFIG" ]; then
+            SITE_NAME=$(grep '^site_name:' "$CONFIG" | sed 's/site_name:\s*//' | tr -d '"' | tr -d "'")
+            SITE_URL=$(grep '^site_url:' "$CONFIG" | sed 's/site_url:\s*//' | tr -d '"' | tr -d "'")
+            echo "SITE_NAME=${SITE_NAME}" >> $GITHUB_ENV
+            echo "SITE_URL=${SITE_URL}" >> $GITHUB_ENV
+          fi
+
+      - name: Run AI article review
+        if: steps.round.outputs.should_review == 'true'
+        uses: anthropics/claude-code-action@220272d38887a1caed373da96a9ffdb0919c26cc
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.WORKFLOW_TOKEN }}
+          show_full_output: "true"
+          claude_args: "--model ${{ inputs.model || 'claude-sonnet-4-6' }} --max-turns 40 --allowedTools 'Bash,Read,Write,Edit'"
+          prompt: |
+            You are an automated reviewer for blog articles on this site (${{ env.SITE_URL || 'the blog' }}).
+            This is review round ${{ steps.round.outputs.current_round }} of ${{ inputs.max_rounds || '5' }}.
+
+            ## Setup
+
+            Read these files for context (they are already checked out):
+            1. `.github/article-review-rules.md` — the complete list of rules to check (if exists)
+            2. `docs/GUIDE_BLOG.md` — blog article structure and requirements (if exists)
+            3. `docs/GUIDE_VISUALS.md` — visual component patterns (if exists)
+            4. `docs/GUIDE_LINKING.md` — internal linking rules (if exists)
+
+            Then find the changed article files by running:
+            ```
+            git diff --name-only origin/master...HEAD | grep -E 'src/app/blog/.+/(page|opengraph-image)\.tsx'
+            ```
+            Read each changed file fully and review against every rule.
+
+            ## Your task
+
+            Focus on real errors only — SEO breakage, broken tracking, missing required components, TypeScript errors, broken CTAs, hype language, unattributed statistics.
+
+            For each real issue you find:
+            - Fix it directly in the code
+            - Note the file, line, severity (HIGH/MEDIUM), and explanation
+            - Report a maximum of 7 findings per round, prioritizing HIGH severity
+
+            ## Output format
+
+            Post a PR comment BEFORE running git push. Use EXACTLY this format:
+
+            If issues were found and fixed:
+            ```
+            <!-- AI-ARTICLE-REVIEW-ROUND: ${{ steps.round.outputs.current_round }} -->
+            ## AI Article Review — Round ${{ steps.round.outputs.current_round }} of ${{ inputs.max_rounds || '5' }}
+
+            ### Summary
+            | Metric       | Value              |
+            |--------------|--------------------|
+            | Issues found | <number>           |
+            | Issues fixed | <number>           |
+            | Status       | FIXES_APPLIED ✓ all fixes committed |
+
+            ### Findings & Fixes
+
+            #### ✅ [SEVERITY] Short description
+            **File:** `path/to/file.tsx` line N
+            **Problem:** What is wrong.
+            **Fix applied:** What was changed.
+            ```
+
+            After posting the comment:
+            1. `git add -A`
+            2. `git commit -m "fix: address article review round ${{ steps.round.outputs.current_round }} findings"`
+            3. `git push`
+
+            If NO issues were found:
+            ```
+            <!-- AI-ARTICLE-REVIEW-ROUND: ${{ steps.round.outputs.current_round }} ALL_CLEAR:${{ github.event.pull_request.head.sha }} -->
+            ## AI Article Review — Round ${{ steps.round.outputs.current_round }} of ${{ inputs.max_rounds || '5' }}
+
+            ### Summary
+            | Metric       | Value     |
+            |--------------|-----------|
+            | Issues found | 0         |
+            | Status       | ALL_CLEAR |
+
+            No issues found — article meets all quality and SEO requirements.
+            ```

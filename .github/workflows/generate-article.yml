@@ -1,0 +1,179 @@
+name: Generate Blog Article
+
+on:
+  workflow_call:
+    inputs:
+      config_path:
+        description: 'Path to config.yml in the calling repo'
+        required: false
+        default: './config.yml'
+        type: string
+      topic_number:
+        description: 'Specific topic number (optional)'
+        required: false
+        type: number
+      dry_run:
+        description: 'Dry run (no commit/PR)'
+        required: false
+        default: false
+        type: boolean
+    secrets:
+      ANTHROPIC_API_KEY:
+        required: true
+      GH_PAT:
+        required: false
+      TELEGRAM_BOT_TOKEN:
+        required: false
+      TELEGRAM_CHAT_ID:
+        required: false
+
+  # Allow direct schedule/dispatch when used standalone (e.g. in engine repo itself)
+  workflow_dispatch:
+    inputs:
+      topic_number:
+        description: 'Specific topic number (optional)'
+        required: false
+        type: number
+      dry_run:
+        description: 'Dry run (no commit/PR)'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout calling repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Checkout engine
+        uses: actions/checkout@v4
+        with:
+          repository: cybrixcc/leadhunter-engine
+          path: .engine
+          ref: main
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: .engine/package.json
+
+      - name: Install engine dependencies
+        run: npm ci --prefix .engine
+
+      - name: Load config and set env vars
+        run: |
+          CONFIG="${{ inputs.config_path || './config.yml' }}"
+          if [ -f "$CONFIG" ]; then
+            # Export config fields as env vars for scripts
+            SITE_NAME=$(grep '^site_name:' "$CONFIG" | sed 's/site_name:\s*//' | tr -d '"' | tr -d "'")
+            SITE_URL=$(grep '^site_url:' "$CONFIG" | sed 's/site_url:\s*//' | tr -d '"' | tr -d "'")
+            GIT_USER_NAME=$(grep '^git_user_name:' "$CONFIG" | sed 's/git_user_name:\s*//' | tr -d '"' | tr -d "'" || echo "Blog Bot")
+            GIT_USER_EMAIL=$(grep '^git_user_email:' "$CONFIG" | sed 's/git_user_email:\s*//' | tr -d '"' | tr -d "'" || echo "bot@example.com")
+            echo "SITE_NAME=${SITE_NAME}" >> $GITHUB_ENV
+            echo "SITE_URL=${SITE_URL}" >> $GITHUB_ENV
+            echo "SITE_LABEL=${SITE_NAME}" >> $GITHUB_ENV
+            echo "GIT_USER_NAME=${GIT_USER_NAME}" >> $GITHUB_ENV
+            echo "GIT_USER_EMAIL=${GIT_USER_EMAIL}" >> $GITHUB_ENV
+          fi
+
+      - name: Setup Git
+        run: |
+          git config user.name "${GIT_USER_NAME:-Blog Bot}"
+          git config user.email "${GIT_USER_EMAIL:-bot@example.com}"
+
+      - name: Generate article
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+          INPUT_TOPIC_NUMBER: ${{ inputs.topic_number }}
+        run: |
+          # Copy engine scripts into cwd so relative paths work
+          cp -r .engine/scripts ./scripts
+          ARGS=""
+          if [ "$INPUT_DRY_RUN" = "true" ]; then ARGS="--dry-run"; fi
+          if [ -n "$INPUT_TOPIC_NUMBER" ]; then ARGS="$ARGS --topic=$INPUT_TOPIC_NUMBER"; fi
+          node scripts/generate-article.mjs $ARGS
+
+      - name: Upload generated article (dry-run only)
+        if: inputs.dry_run == true
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-article
+          path: /tmp/generated-article-*.tsx
+          retention-days: 7
+
+      - name: Send Telegram notification
+        if: success() && inputs.dry_run != true
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if [ -f /tmp/article-result.json ]; then
+            TITLE=$(jq -r '.title' /tmp/article-result.json)
+            PR_URL=$(jq -r '.prUrl // empty' /tmp/article-result.json)
+            PASSED=$(jq -r '.quality.passed' /tmp/article-result.json)
+            TOTAL=$(jq -r '.quality.total' /tmp/article-result.json)
+            WORDS=$(jq -r '.quality.wordCount' /tmp/article-result.json)
+            TOPIC=$(jq -r '.topicNumber // empty' /tmp/article-result.json)
+            BRANCH=$(jq -r '.branch // empty' /tmp/article-result.json)
+            BUILD_ATTEMPTS=$(jq -r '.build.attempts // 1' /tmp/article-result.json)
+            BUILD_AUTOFIXED=$(jq -r '.build.autoFixed // false' /tmp/article-result.json)
+
+            if [ -n "$PR_URL" ] && [ "$PR_URL" != "null" ]; then
+              PR_NUM=$(echo "$PR_URL" | grep -oE '[0-9]+$')
+              LINK_LINE="🔗 <a href=\"${PR_URL}\">PR #${PR_NUM}</a>"
+            elif [ -n "$BRANCH" ]; then
+              LINK_LINE="🌿 Branch: ${BRANCH}"
+            else
+              LINK_LINE=""
+            fi
+
+            BUILD_LINE="✅ Build passed"
+            if [ "$BUILD_AUTOFIXED" = "true" ]; then
+              BUILD_LINE="🔧 Build auto-fixed (${BUILD_ATTEMPTS} attempts)"
+            fi
+
+            LABEL="${SITE_NAME:-Blog}"
+            MESSAGE=$(printf '📝 %s — New Article!\n\n#%s %s\n\n⭐ %s/%s checks · %s words\n%s\n%s' "$LABEL" "$TOPIC" "$TITLE" "$PASSED" "$TOTAL" "$WORDS" "$BUILD_LINE" "$LINK_LINE")
+            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              -d chat_id="${TELEGRAM_CHAT_ID}" \
+              -d text="$MESSAGE" \
+              -d parse_mode="HTML" \
+              -d disable_web_page_preview="true"
+          fi
+
+      - name: Send failure notification
+        if: failure()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          if [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
+            LABEL="${SITE_NAME:-Blog}"
+            if [ -f /tmp/article-result.json ]; then
+              TITLE=$(jq -r '.title // "Unknown"' /tmp/article-result.json)
+              ERROR=$(jq -r '.error // "Unknown error"' /tmp/article-result.json)
+              ATTEMPTS=$(jq -r '.buildAttempts // "?"' /tmp/article-result.json)
+              MESSAGE=$(printf '⛔ %s — Article Generation Failed!\n\n📄 %s\n❌ %s\n🔧 Build fix attempts: %s\n\n🔗 <a href="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}">View Run</a>' "$LABEL" "$TITLE" "$ERROR" "$ATTEMPTS")
+            else
+              MESSAGE=$(printf '⛔ %s — Article Generation Failed!\n\nWorkflow failed. Check logs for details.\n\n🔗 <a href="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}">View Run</a>' "$LABEL")
+            fi
+            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              -d chat_id="${TELEGRAM_CHAT_ID}" \
+              -d text="$MESSAGE" \
+              -d parse_mode="HTML" \
+              -d disable_web_page_preview="true"
+          fi

@@ -1,0 +1,183 @@
+name: GEO Health Check
+
+on:
+  workflow_call:
+    inputs:
+      config_path:
+        description: 'Path to config.yml in the calling repo'
+        required: false
+        default: './config.yml'
+        type: string
+      blog_glob:
+        description: 'Glob pattern for blog article files (relative to repo root)'
+        required: false
+        default: 'src/app/blog/*/page.tsx'
+        type: string
+    secrets:
+      TELEGRAM_BOT_TOKEN:
+        required: false
+      TELEGRAM_CHAT_ID:
+        required: false
+
+  workflow_dispatch:
+    inputs:
+      blog_glob:
+        description: 'Glob pattern for blog article files'
+        required: false
+        default: 'src/app/blog/*/page.tsx'
+        type: string
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  geo-health-check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout calling repository
+        uses: actions/checkout@v4
+
+      - name: Checkout engine
+        uses: actions/checkout@v4
+        with:
+          repository: cybrixcc/leadhunter-engine
+          path: .engine
+          ref: main
+
+      - name: Load config and set env vars
+        run: |
+          CONFIG="${{ inputs.config_path || './config.yml' }}"
+          if [ -f "$CONFIG" ]; then
+            SITE_NAME=$(grep '^site_name:' "$CONFIG" | sed 's/site_name:\s*//' | tr -d '"' | tr -d "'")
+            echo "SITE_NAME=${SITE_NAME}" >> $GITHUB_ENV
+            echo "SITE_LABEL=${SITE_NAME}" >> $GITHUB_ENV
+          fi
+          echo "BLOG_GLOB=${{ inputs.blog_glob || 'src/app/blog/*/page.tsx' }}" >> $GITHUB_ENV
+
+      - name: Copy engine scripts
+        run: cp -r .engine/scripts ./scripts
+
+      - name: Run GEO Health Check
+        id: run_check
+        continue-on-error: true
+        run: |
+          chmod +x scripts/geo-health-check.sh
+          ./scripts/geo-health-check.sh | tee geo_output.txt
+
+      - name: Extract Score
+        id: health_check
+        if: always()
+        run: |
+          SCORE=$(grep "TOTAL GEO HEALTH SCORE:" geo_output.txt 2>/dev/null | sed 's/.*SCORE: //;s/ \/.*//' || echo "0.0")
+          if [ -z "$SCORE" ]; then SCORE="0.0"; fi
+          ARTICLES=$(grep "Total Articles Analyzed:" geo_output.txt 2>/dev/null | awk '{print $NF}' || echo "0")
+          LOW_LINKS=$(grep "needs more" geo_output.txt 2>/dev/null | wc -l | tr -d ' ' || echo "0")
+          NO_QUOTES=$(grep "No quotable blocks" geo_output.txt 2>/dev/null | wc -l | tr -d ' ' || echo "0")
+          echo "score=$SCORE" >> $GITHUB_OUTPUT
+          echo "articles=$ARTICLES" >> $GITHUB_OUTPUT
+          echo "low_links=$LOW_LINKS" >> $GITHUB_OUTPUT
+          echo "no_quotes=$NO_QUOTES" >> $GITHUB_OUTPUT
+          if (( $(awk "BEGIN {print ($SCORE < 7.0)}") )); then
+            echo "needs_attention=true" >> $GITHUB_OUTPUT
+          else
+            echo "needs_attention=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload Health Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: geo-health-report-${{ github.run_number }}
+          path: logs/geo-health-*.txt
+          retention-days: 90
+          if-no-files-found: ignore
+
+      - name: Create or update GEO health issue
+        id: issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const score = parseFloat('${{ steps.health_check.outputs.score }}');
+            const lowLinks = parseInt('${{ steps.health_check.outputs.low_links }}') || 0;
+            const noQuotes = parseInt('${{ steps.health_check.outputs.no_quotes }}') || 0;
+            const date = new Date().toISOString().split('T')[0];
+            const runUrl = '${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}';
+
+            let report = '';
+            try {
+              const files = fs.readdirSync('logs').filter(f => f.startsWith('geo-health-'));
+              if (files.length > 0) report = fs.readFileSync(`logs/${files[0]}`, 'utf8');
+            } catch (e) {}
+
+            const tasks = [];
+            if (lowLinks > 0) tasks.push(`- [ ] Add internal links to ${lowLinks} articles`);
+            if (noQuotes > 0) tasks.push(`- [ ] Add quotable blocks to ${noQuotes} articles`);
+            if (tasks.length === 0) tasks.push('- [x] No issues found this week');
+
+            const scoreEmoji = score >= 9.0 ? '🟢' : score >= 7.0 ? '🟡' : '🔴';
+            const body = [
+              `## ${scoreEmoji} GEO Health Check — ${date}`,
+              '',
+              `**Score:** ${score}/10.0 | **Articles analyzed:** ${{ steps.health_check.outputs.articles }}`,
+              '',
+              '### Actionable Tasks',
+              tasks.join('\n'),
+              '',
+              report ? `<details><summary>Full report</summary>\n\n\`\`\`\n${report}\n\`\`\`\n</details>` : `[Full run log](${runUrl})`,
+              '',
+              `**Run:** [Actions #${{ github.run_number }}](${runUrl})`
+            ].join('\n');
+
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              labels: 'geo-health',
+              state: 'open',
+              per_page: 1
+            });
+
+            let issueNumber;
+            if (existing.data.length > 0) {
+              issueNumber = existing.data[0].number;
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                title: `GEO Health Check — ${scoreEmoji} ${score}/10.0`,
+                body: body,
+                state: score >= 9.5 ? 'closed' : 'open'
+              });
+            } else if (score < 9.5) {
+              const created = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: `GEO Health Check — ${scoreEmoji} ${score}/10.0`,
+                body: body,
+                labels: ['geo-health', 'content', 'automation']
+              });
+              issueNumber = created.data.number;
+            }
+
+            const issueUrl = issueNumber
+              ? `https://github.com/${{ github.repository }}/issues/${issueNumber}`
+              : runUrl;
+            core.setOutput('issue_url', issueUrl);
+
+      - name: Send Telegram Notification
+        if: always()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_URL: ${{ steps.issue.outputs.issue_url }}
+        run: |
+          chmod +x scripts/send-telegram-notification.sh
+          ./scripts/send-telegram-notification.sh geo-health \
+            "${{ steps.health_check.outputs.score }}" \
+            "${{ steps.health_check.outputs.articles }}" \
+            "${{ steps.health_check.outputs.low_links }}" \
+            "${{ steps.health_check.outputs.no_quotes }}" \
+            "$GITHUB_RUN_URL"
