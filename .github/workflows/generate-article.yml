@@ -148,13 +148,7 @@ jobs:
             fi
 
             LABEL="${SITE_NAME:-Blog}"
-            MESSAGE=$(printf '📝 %s — New Article!
-
-#%s %s
-
-⭐ %s/%s checks · %s words
-%s
-%s' "$LABEL" "$TOPIC" "$TITLE" "$PASSED" "$TOTAL" "$WORDS" "$BUILD_LINE" "$LINK_LINE")
+            MESSAGE=$(printf '📝 %s — New Article!\n\n#%s %s\n\n⭐ %s/%s checks · %s words\n%s\n%s' "$LABEL" "$TOPIC" "$TITLE" "$PASSED" "$TOTAL" "$WORDS" "$BUILD_LINE" "$LINK_LINE")
             curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
               -d chat_id="${TELEGRAM_CHAT_ID}" \
               -d text="$MESSAGE" \
