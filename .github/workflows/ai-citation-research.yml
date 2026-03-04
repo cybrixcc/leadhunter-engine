@@ -1,0 +1,89 @@
+name: AI Citation Research
+
+on:
+  workflow_call:
+    inputs:
+      config_path:
+        description: 'Path to config.yml in the calling repo'
+        required: false
+        default: './config.yml'
+        type: string
+    secrets:
+      ANTHROPIC_API_KEY:
+        required: true
+      OPENAI_API_KEY:
+        required: true
+      GEMINI_API_KEY:
+        required: false
+      TELEGRAM_BOT_TOKEN:
+        required: false
+      TELEGRAM_CHAT_ID:
+        required: false
+      GH_TOKEN:
+        required: false
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  citation-research:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout calling repository
+        uses: actions/checkout@v4
+
+      - name: Checkout engine
+        uses: actions/checkout@v4
+        with:
+          repository: cybrixcc/leadhunter-engine
+          path: .engine
+          ref: master
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: .engine/package.json
+
+      - name: Install engine dependencies
+        run: npm ci --prefix .engine
+
+      - name: Load config and set env vars
+        run: |
+          CONFIG="${{ inputs.config_path || './config.yml' }}"
+          if [ -f "$CONFIG" ]; then
+            SITE_NAME=$(grep '^site_name:' "$CONFIG" | sed 's/site_name:\s*//' | tr -d '"' | tr -d "'")
+            SITE_URL=$(grep '^site_url:' "$CONFIG" | sed 's/site_url:\s*//' | tr -d '"' | tr -d "'")
+            echo "SITE_NAME=${SITE_NAME}" >> $GITHUB_ENV
+            echo "SITE_URL=${SITE_URL}" >> $GITHUB_ENV
+            echo "SITE_LABEL=${SITE_NAME}" >> $GITHUB_ENV
+            echo "CONFIG_PATH=${CONFIG}" >> $GITHUB_ENV
+          fi
+
+      - name: Copy engine scripts
+        run: cp -r .engine/scripts ./scripts
+
+      - name: Run AI Citation Research
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN || github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node scripts/ai-citation-research.mjs
+
+      - name: Send Telegram Notification
+        if: always()
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          chmod +x scripts/send-telegram-notification.sh
+          ./scripts/send-telegram-notification.sh ai-citation-research
