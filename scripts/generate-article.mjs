@@ -22,7 +22,7 @@ import { generateArticle } from './lib/article-generator.mjs';
 import { runImprovementLoop, formatReport } from './lib/article-improver.mjs';
 import { updateAllFiles } from './lib/file-updater.mjs';
 import { verifyBuild } from './lib/build-verifier.mjs';
-import { prepareGitBranch, completeGitWorkflow } from './lib/git-operations.mjs';
+import { prepareGitBranch, completeGitWorkflow, createPullRequest } from './lib/git-operations.mjs';
 
 // Parse CLI arguments
 const args = process.argv.slice(2);
@@ -140,11 +140,42 @@ async function main() {
 
   if (!buildResult.success) {
     console.error(`\n⛔ Build failed after ${buildResult.attempts} fix attempts.`);
-    console.error('Cannot commit broken code. Stopping here.');
-    console.error('\nLast build error:');
-    console.error(buildResult.errors[buildResult.errors.length - 1]);
+    console.error('Creating PR with [BUILD FAILED] label for manual review...');
 
-    // Write result for CI notification (failed state)
+    const lastError = buildResult.errors[buildResult.errors.length - 1] || 'Unknown error';
+
+    // Commit broken article anyway so AI reviewer can fix it in a PR
+    const { execSync } = await import('child_process');
+    try {
+      execSync('git add -A', { stdio: 'inherit' });
+      execSync(`git commit -m "wip: [BUILD FAILED] ${brief.title} — needs JSX fix"`, { stdio: 'inherit' });
+      execSync(`git push -u origin ${branchName}`, { stdio: 'inherit' });
+    } catch (gitErr) {
+      console.error('Git push failed:', gitErr.message);
+    }
+
+    const prBody = `## ⛔ Build Failed — Needs Manual Fix
+
+**Article:** ${brief.title}
+**Slug:** /blog/${slug}
+**Build attempts:** ${buildResult.attempts}
+
+### Last build error
+\`\`\`
+${lastError.split('\n').slice(0, 30).join('\n')}
+\`\`\`
+
+### What to do
+The article was generated and committed but the Next.js build is failing.
+AI article reviewer will attempt to fix the JSX errors automatically.
+If it cannot fix automatically, resolve the build error in \`src/app/blog/${slug}/page.tsx\` manually.`;
+
+    const prUrl = await createPullRequest({
+      title: `[BUILD FAILED] ${brief.title}`,
+      body: prBody,
+      baseBranch: 'master',
+    }).catch(() => null);
+
     const { writeFile } = await import('fs/promises');
     await writeFile('/tmp/article-result.json', JSON.stringify({
       success: false,
@@ -152,11 +183,13 @@ async function main() {
       title: brief.title,
       slug,
       branch: branchName,
-      error: 'Build failed after auto-fix attempts',
+      prUrl,
+      error: 'Build failed after auto-fix attempts — PR created for review',
       buildAttempts: buildResult.attempts,
     }, null, 2));
 
-    process.exit(1);
+    // Exit 0 so Telegram sends notification (not failure notification)
+    process.exit(0);
   }
 
   if (buildResult.attempts > 1) {
