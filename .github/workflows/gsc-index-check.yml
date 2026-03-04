@@ -35,6 +35,7 @@ jobs:
           repository: cybrixcc/leadhunter-engine
           path: .engine
           ref: main
+          token: ${{ secrets.GH_PAT }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
