@@ -125,19 +125,12 @@ jobs:
               `**Score:** ${score}/10.0 | **Articles analyzed:** ${{ steps.health_check.outputs.articles }}`,
               '',
               '### Actionable Tasks',
-              tasks.join('
-'),
+              tasks.join('\n'),
               '',
-              report ? `<details><summary>Full report</summary>
-
-\`\`\`
-${report}
-\`\`\`
-</details>` : `[Full run log](${runUrl})`,
+              report ? '<details><summary>Full report</summary>\n\n```\n' + report + '\n```\n</details>' : '[Full run log](' + runUrl + ')',
               '',
               `**Run:** [Actions #${{ github.run_number }}](${runUrl})`
-            ].join('
-');
+            ].join('\n');
 
             const existing = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
