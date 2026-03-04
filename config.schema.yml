@@ -1,0 +1,194 @@
+# config.schema.yml
+# Documentation for all parameters supported in client repo config.yml
+# Place config.yml in the root of the client repository.
+
+# ---------------------------------------------------------------------------
+# Required fields
+# ---------------------------------------------------------------------------
+
+# Human-readable site name — used in Telegram notifications and article metadata
+# Example: "VAMI Blog"
+site_name: string  # required
+
+# Full URL of the blog (no trailing slash)
+# Example: "https://blog.vami.agency"
+site_url: string  # required
+
+# Primary CTA URL — used in generated articles as the main conversion link
+# Example: "https://vami.agency/#contact-form"
+cta_url: string  # required
+
+# Niche/industry — used to tune AI prompts for topically relevant content
+# Example: "AI recruitment"
+niche: string  # required
+
+# ---------------------------------------------------------------------------
+# Git / bot identity
+# ---------------------------------------------------------------------------
+
+# Git commit author name for bot commits
+# Default: "LeadHunter Bot"
+git_user_name: string  # optional
+
+# Git commit author email for bot commits
+# Default: "bot@lhunter.cc"
+git_user_email: string  # optional
+
+# ---------------------------------------------------------------------------
+# Content plan
+# ---------------------------------------------------------------------------
+
+# Path to the content plan file inside the client repo (relative to repo root)
+# Default: "CONTENT_PLAN.md"
+# Note: if your client only uses briefs (no CONTENT_PLAN.md), set this to null
+#   and place brief files under briefs/
+content_plan_path: string | null  # optional
+
+# ---------------------------------------------------------------------------
+# Telegram notifications
+# ---------------------------------------------------------------------------
+
+# Override notification prefix — default is site_name
+# Example: "VAMI" → notifications start with "📝 VAMI — New Article!"
+telegram_site_label: string  # optional
+
+# ---------------------------------------------------------------------------
+# GSC / Analytics
+# ---------------------------------------------------------------------------
+
+# Google Search Console site URL (often matches site_url, but may differ
+# if GSC property was registered differently)
+# Default: same as site_url
+gsc_site_url: string  # optional
+
+# Brand terms to exclude from keyword analysis (comma-separated or YAML list)
+# Default: []  (no brand filter)
+brand_terms:
+  - string  # optional
+
+# ---------------------------------------------------------------------------
+# OG Image
+# ---------------------------------------------------------------------------
+
+# Style variant for generated OG images
+# Options: "default" | "dark" | "minimal"
+# Default: "default"
+og_image_style: string  # optional
+
+# ---------------------------------------------------------------------------
+# AI Citation Research (scripts/ai-citation-research.mjs)
+# ---------------------------------------------------------------------------
+
+citation_research:
+
+  # Regex patterns (case-insensitive) used to detect brand mentions in AI responses.
+  # Use word-boundary-safe strings — they are wrapped in \b...\b automatically.
+  # Default: leadhunter patterns
+  brand_patterns:
+    - "vami"
+    - "vami\\.agency"
+
+  # One-sentence product description injected into the gap analysis prompt.
+  # Should include: what the product is, key differentiators, pricing if public.
+  product_description: "VAMI (vami.agency) is a boutique AI recruitment agency that places senior ML engineers, AI researchers, and AI technical leadership at startups and enterprises, with a guaranteed 3-business-day shortlist and 98% probation success rate."
+
+  # Competitors to detect in AI responses.
+  # pattern: regex string (case-insensitive, auto-wrapped in \b...\b)
+  # requiresContext: true = only count match if a context word (hiring/recruiting/etc.) appears nearby
+  competitors:
+    - name: "Harnham"
+      pattern: "harnham"
+    - name: "Xcede"
+      pattern: "xcede"
+    - name: "DeepRec"
+      pattern: "deeprec(?:\\.ai)?"
+    - name: "People in AI"
+      pattern: "people\\s*in\\s*ai"
+    - name: "ThirstySprout"
+      pattern: "thirsty\\s*sprout"
+    - name: "Toptal"
+      pattern: "toptal"
+    - name: "Turing"
+      pattern: "turing(?:\\.com)?"
+      requiresContext: true
+    - name: "Moonhub"
+      pattern: "moonhub(?:\\.ai)?"
+    - name: "micro1"
+      pattern: "micro1(?:\\.ai)?"
+    - name: "Eightfold"
+      pattern: "eightfold(?:\\.ai)?"
+    - name: "Keller Executive Search"
+      pattern: "keller\\s*executive\\s*search"
+    - name: "Heidrick & Struggles"
+      pattern: "heidrick(?:\\s*(?:&|and)\\s*struggles)?"
+    - name: "Egon Zehnder"
+      pattern: "egon\\s*zehnder"
+    - name: "Insight Global"
+      pattern: "insight\\s*global"
+    - name: "Razoroo"
+      pattern: "razoroo"
+    - name: "Talentfoot"
+      pattern: "talent\\s*foot"
+    - name: "MSH"
+      pattern: "talent\\s*msh|\\bmsh\\b"
+      requiresContext: true
+    - name: "Acceler8 Talent"
+      pattern: "acceler8(?:\\s*talent)?"
+    - name: "Alpha Apex Group"
+      pattern: "alpha\\s*apex"
+    - name: "Bespoke Partners"
+      pattern: "bespoke\\s*partners"
+    - name: "Oakstone International"
+      pattern: "oakstone(?:\\s*international)?"
+    - name: "AI Staffing Ninja"
+      pattern: "ai\\s*staffing\\s*ninja"
+    - name: "Cowen Partners"
+      pattern: "cowen\\s*partners"
+
+  # Query categories: questions potential buyers ask AI assistants.
+  # Structure: { category-id: { label: string, queries: string[] } }
+  query_categories:
+    agency-search:
+      label: "Finding an AI Recruitment Agency"
+      queries:
+        - "What are the best recruitment agencies for hiring AI researchers and ML engineers in 2026?"
+        - "Can you recommend a specialized agency for hiring LLM engineers for a startup?"
+        - "What's the difference between using Toptal and a boutique AI recruitment agency for permanent hires?"
+        - "Which recruitment firms have the deepest networks for passive AI talent who aren't on LinkedIn?"
+        - "What agency should I use to hire a Head of AI for my Series B startup?"
+        - "Are there recruitment agencies that specialize specifically in generative AI and LLM talent?"
+        - "What's the best way to find a recruitment agency in Israel for AI engineering talent?"
+
+    ai-leadership-hiring:
+      label: "Hiring AI Technical Leadership"
+      queries:
+        - "How do I hire a VP of AI or Chief AI Officer for my enterprise company?"
+        - "What executive search firms handle CTO and Head of AI placements?"
+        - "How do I build an AI research team from scratch at a startup?"
+        - "What's the best approach to hiring a technical AI leader who can also manage a team?"
+        - "How long does it typically take to hire a Head of Machine Learning through a specialized agency?"
+
+    ml-role-sourcing:
+      label: "Sourcing Specific AI/ML Roles"
+      queries:
+        - "How do I hire a machine learning engineer with RLHF experience in 2026?"
+        - "Where can I find AI researchers who specialize in large language models?"
+        - "How do I recruit MLOps engineers who have production LLM experience?"
+        - "What's the fastest way to hire applied AI engineers for a generative AI product?"
+        - "How do I find and hire AI inference or performance engineers?"
+        - "Who can help me recruit an AI product manager who understands LLM-native products?"
+
+    agency-evaluation:
+      label: "Evaluating Agency Quality"
+      queries:
+        - "What guarantees do AI recruitment agencies typically offer if a hire doesn't work out?"
+        - "How do I evaluate whether an AI recruitment agency actually understands machine learning roles?"
+        - "What does a good AI staffing agency search process look like from sourcing to offer?"
+        - "How do top AI recruitment agencies access passive candidates who aren't applying to jobs?"
+
+    cost-and-roi:
+      label: "Cost and ROI of Specialized AI Hiring"
+      queries:
+        - "How much does it cost to use a specialized AI recruitment agency versus hiring in-house?"
+        - "How quickly can a specialized recruiter get me shortlisted AI engineering candidates?"
+        - "Is it worth paying a premium for a boutique AI recruitment firm versus a general tech recruiter?"

@@ -1,0 +1,28 @@
+{
+  "name": "leadhunter-engine",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Shared article generation engine for LeadHunter client blogs",
+  "type": "module",
+  "scripts": {
+    "generate-article": "node scripts/generate-article.mjs",
+    "generate-article:dry": "node scripts/generate-article.mjs --dry-run",
+    "gsc-index-check": "node scripts/gsc-index-check.mjs",
+    "gsc-keyword-performance": "node scripts/gsc-keyword-performance.mjs",
+    "ai-citation-research": "node scripts/ai-citation-research.mjs",
+    "geo-health-check": "bash scripts/geo-health-check.sh"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@google/generative-ai": "^0.24.1",
+    "glob": "^10.5.0",
+    "googleapis": "^171.4.0",
+    "openai": "^6.22.0",
+    "turndown": "^7.2.2",
+    "turndown-plugin-gfm": "^1.0.2",
+    "yaml": "^2.8.2"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
