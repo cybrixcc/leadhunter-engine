@@ -45,6 +45,7 @@ jobs:
           repository: cybrixcc/leadhunter-engine
           path: .engine
           ref: main
+          token: ${{ secrets.GH_PAT }}
 
       - name: Load config and set env vars
         run: |
@@ -124,12 +125,19 @@ jobs:
               `**Score:** ${score}/10.0 | **Articles analyzed:** ${{ steps.health_check.outputs.articles }}`,
               '',
               '### Actionable Tasks',
-              tasks.join('\n'),
+              tasks.join('
+'),
               '',
-              report ? `<details><summary>Full report</summary>\n\n\`\`\`\n${report}\n\`\`\`\n</details>` : `[Full run log](${runUrl})`,
+              report ? `<details><summary>Full report</summary>
+
+\`\`\`
+${report}
+\`\`\`
+</details>` : `[Full run log](${runUrl})`,
               '',
               `**Run:** [Actions #${{ github.run_number }}](${runUrl})`
-            ].join('\n');
+            ].join('
+');
 
             const existing = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
