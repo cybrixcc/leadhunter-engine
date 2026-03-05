@@ -83,11 +83,13 @@ jobs:
             # Export config fields as env vars for scripts
             SITE_NAME=$(grep '^site_name:' "$CONFIG" | sed 's/site_name:\s*//' | tr -d '"' | tr -d "'")
             SITE_URL=$(grep '^site_url:' "$CONFIG" | sed 's/site_url:\s*//' | tr -d '"' | tr -d "'")
+            TELEGRAM_SITE_LABEL=$(grep '^telegram_site_label:' "$CONFIG" | sed 's/telegram_site_label:\s*//' | tr -d '"' | tr -d "'")
             GIT_USER_NAME=$(grep '^git_user_name:' "$CONFIG" | sed 's/git_user_name:\s*//' | tr -d '"' | tr -d "'" || echo "Blog Bot")
             GIT_USER_EMAIL=$(grep '^git_user_email:' "$CONFIG" | sed 's/git_user_email:\s*//' | tr -d '"' | tr -d "'" || echo "bot@example.com")
             echo "SITE_NAME=${SITE_NAME}" >> $GITHUB_ENV
             echo "SITE_URL=${SITE_URL}" >> $GITHUB_ENV
-            echo "SITE_LABEL=${SITE_NAME}" >> $GITHUB_ENV
+            # Use telegram_site_label if set (e.g. "lhunter.cc"), fall back to site_name
+            echo "SITE_LABEL=${TELEGRAM_SITE_LABEL:-$SITE_NAME}" >> $GITHUB_ENV
             echo "GIT_USER_NAME=${GIT_USER_NAME}" >> $GITHUB_ENV
             echo "GIT_USER_EMAIL=${GIT_USER_EMAIL}" >> $GITHUB_ENV
           fi
