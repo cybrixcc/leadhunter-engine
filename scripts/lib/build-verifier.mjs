@@ -19,7 +19,7 @@ import { runQualityChecks } from './quality-checker.mjs';
 
 const execAsync = promisify(exec);
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT_DIR = join(__dirname, '..', '..');
+const ROOT_DIR = process.env.CLIENT_REPO_PATH || join(__dirname, '..', '..');
 
 const MAX_BUILD_FIX_ATTEMPTS = 3;
 
