@@ -13,7 +13,7 @@ import { fileURLToPath } from 'url';
 
 const execAsync = promisify(exec);
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT_DIR = join(__dirname, '..', '..');
+const ROOT_DIR = process.env.CLIENT_REPO_PATH || join(__dirname, '..', '..');
 
 /**
  * Run `npm run build` and return the result.
