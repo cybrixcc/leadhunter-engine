@@ -9,7 +9,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT_DIR = join(__dirname, '..', '..');
+const ROOT_DIR = process.env.CLIENT_REPO_PATH || join(__dirname, '..', '..');
 const BRIEFS_DIR = join(ROOT_DIR, 'docs', 'briefs');
 
 /**
