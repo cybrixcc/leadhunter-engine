@@ -101,12 +101,12 @@ jobs:
           INPUT_DRY_RUN: ${{ inputs.dry_run }}
           INPUT_TOPIC_NUMBER: ${{ inputs.topic_number }}
         run: |
-          # Copy engine scripts into cwd so relative paths work
-          cp -r .engine/scripts ./scripts
           ARGS=""
           if [ "$INPUT_DRY_RUN" = "true" ]; then ARGS="--dry-run"; fi
-          if [ -n "$INPUT_TOPIC_NUMBER" ]; then ARGS="$ARGS --topic=$INPUT_TOPIC_NUMBER"; fi
-          node scripts/generate-article.mjs $ARGS
+          if [ -n "$INPUT_TOPIC_NUMBER" ] && [ "$INPUT_TOPIC_NUMBER" != "0" ]; then ARGS="$ARGS --topic=$INPUT_TOPIC_NUMBER"; fi
+          # Run from engine dir so node_modules are available
+          # CLIENT_REPO_PATH tells scripts where the calling repo root is
+          cd .engine && CLIENT_REPO_PATH="${{ github.workspace }}" node scripts/generate-article.mjs $ARGS
 
       - name: Upload generated article (dry-run only)
         if: inputs.dry_run == true
