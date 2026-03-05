@@ -70,6 +70,9 @@ jobs:
           cache: 'npm'
           cache-dependency-path: .engine/package.json
 
+      - name: Install client repo dependencies
+        run: npm install
+
       - name: Install engine dependencies
         run: npm install --prefix .engine
 
@@ -91,8 +94,8 @@ jobs:
 
       - name: Setup Git
         run: |
-          git config user.name "${GIT_USER_NAME:-Blog Bot}"
-          git config user.email "${GIT_USER_EMAIL:-bot@example.com}"
+          git config --global user.name "${GIT_USER_NAME:-Blog Bot}"
+          git config --global user.email "${GIT_USER_EMAIL:-bot@example.com}"
 
       - name: Generate article
         env:
@@ -104,9 +107,12 @@ jobs:
           ARGS=""
           if [ "$INPUT_DRY_RUN" = "true" ]; then ARGS="--dry-run"; fi
           if [ -n "$INPUT_TOPIC_NUMBER" ] && [ "$INPUT_TOPIC_NUMBER" != "0" ]; then ARGS="$ARGS --topic=$INPUT_TOPIC_NUMBER"; fi
-          # Run from engine dir so node_modules are available
-          # CLIENT_REPO_PATH tells scripts where the calling repo root is
-          cd .engine && CLIENT_REPO_PATH="${{ github.workspace }}" node scripts/generate-article.mjs $ARGS
+          # Run from engine dir so its node_modules are found, but CLIENT_REPO_PATH
+          # tells scripts where the calling repo root is for file I/O and git/gh commands
+          cd .engine
+          CLIENT_REPO_PATH="${{ github.workspace }}" \
+            GH_WORKING_DIR="${{ github.workspace }}" \
+            node scripts/generate-article.mjs $ARGS
 
       - name: Upload generated article (dry-run only)
         if: inputs.dry_run == true
