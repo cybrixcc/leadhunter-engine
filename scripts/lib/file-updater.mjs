@@ -14,7 +14,7 @@ import { fileURLToPath } from 'url';
 import { getCategoryDisplayName } from './og-image-generator.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT_DIR = join(__dirname, '..', '..');
+const ROOT_DIR = process.env.CLIENT_REPO_PATH || join(__dirname, '..', '..');
 
 /**
  * Add article to blog data file (src/lib/blog-data.ts)
