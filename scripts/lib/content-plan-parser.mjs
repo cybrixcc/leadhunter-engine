@@ -14,7 +14,9 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT_DIR = join(__dirname, '..', '..');
+// When running as reusable engine, CLIENT_REPO_PATH points to calling repo root.
+// Fall back to __dirname/../.. for standalone/local use.
+const ROOT_DIR = process.env.CLIENT_REPO_PATH || join(__dirname, '..', '..');
 
 /**
  * Parse the Article Index table from CONTENT_PLAN.md
