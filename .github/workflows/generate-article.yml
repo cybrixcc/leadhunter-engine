@@ -96,6 +96,9 @@ jobs:
         run: |
           git config --global user.name "${GIT_USER_NAME:-Blog Bot}"
           git config --global user.email "${GIT_USER_EMAIL:-bot@example.com}"
+          # Exclude node_modules and engine checkout from git tracking
+          echo "node_modules/" >> .git/info/exclude
+          echo ".engine/" >> .git/info/exclude
 
       - name: Generate article
         env:
