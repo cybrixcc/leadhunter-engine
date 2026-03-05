@@ -13,6 +13,10 @@ import { promisify } from 'util';
 
 const execAsync = promisify(exec);
 
+// When running as reusable engine, GH_WORKING_DIR points to the calling repo root.
+// Fall back to process.cwd() for standalone/local use.
+const WORKING_DIR = process.env.GH_WORKING_DIR || process.cwd();
+
 /**
  * Execute git command
  * @param {string} command
@@ -20,7 +24,7 @@ const execAsync = promisify(exec);
  */
 async function git(command) {
   try {
-    const { stdout, stderr } = await execAsync(`git ${command}`);
+    const { stdout, stderr } = await execAsync(`git ${command}`, { cwd: WORKING_DIR });
     if (stderr && !stderr.includes('warning')) {
       console.warn('Git warning:', stderr);
     }
@@ -160,7 +164,8 @@ export async function createPullRequest(prData) {
     const escapedTitle = title.replace(/'/g, "'\\''");
 
     const { stdout } = await execAsync(
-      `gh pr create --title '${escapedTitle}' --body-file "${tempBodyFile}" --base ${targetBranch}`
+      `gh pr create --title '${escapedTitle}' --body-file "${tempBodyFile}" --base ${targetBranch}`,
+      { cwd: WORKING_DIR }
     );
     const prUrl = stdout.trim();
     console.log(`Created PR: ${prUrl}`);
