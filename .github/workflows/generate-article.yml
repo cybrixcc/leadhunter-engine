@@ -71,7 +71,7 @@ jobs:
           cache-dependency-path: .engine/package.json
 
       - name: Install engine dependencies
-        run: npm ci --prefix .engine
+        run: npm install --prefix .engine
 
       - name: Load config and set env vars
         run: |
