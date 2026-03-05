@@ -98,7 +98,7 @@ jobs:
         with:
           repository: cybrixcc/leadhunter-engine
           path: .engine
-          ref: main
+          ref: master
           token: ${{ secrets.GH_PAT }}
 
       - name: Fetch context files from master
