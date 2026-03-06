@@ -9,6 +9,7 @@
  * Usage:
  *   node scripts/generate-briefs.mjs                  # auto mode
  *   node scripts/generate-briefs.mjs --count=3        # force generate N briefs
+ *   node scripts/generate-briefs.mjs --min-ready=10   # custom threshold
  *   node scripts/generate-briefs.mjs --dry-run        # preview without writing files
  */
 
@@ -17,7 +18,7 @@ import fs from "fs";
 import path from "path";
 import { loadConfig } from "./lib/config-loader.mjs";
 
-const MIN_READY = 5;
+const DEFAULT_MIN_READY = 5;
 const BRIEFS_DIR = "docs/briefs";
 const CONTENT_PLAN_PATH = "CONTENT_PLAN.md";
 const KEYWORD_RESEARCH_PATH = "docs/KEYWORD_RESEARCH.md";
@@ -26,6 +27,10 @@ const args = process.argv.slice(2);
 const DRY_RUN = args.includes("--dry-run");
 const FORCE_COUNT = parseInt(
   args.find((a) => a.startsWith("--count="))?.split("=")[1] || "0"
+);
+const MIN_READY = parseInt(
+  args.find((a) => a.startsWith("--min-ready="))?.split("=")[1] ||
+  String(DEFAULT_MIN_READY)
 );
 
 // --- Load config ---
@@ -235,8 +240,11 @@ if (newTopicLines.length > 0) {
     `### Article Index (${newCount} topics)`
   );
 
+  // Insert new rows directly before the "> Status values:" line,
+  // stripping any blank lines between the table and the legend so rows
+  // are never orphaned from the table by a blank line.
   updated = updated.replace(
-    /\n> Status values:/,
+    /\n+> Status values:/,
     "\n" + newTopicLines.join("\n") + "\n\n> Status values:"
   );
 

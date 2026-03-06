@@ -120,6 +120,10 @@ jobs:
           if [ "${{ inputs.force_count }}" != "0" ] && [ -n "${{ inputs.force_count }}" ]; then
             ARGS="$ARGS --count=${{ inputs.force_count }}"
           fi
+          MIN_READY="${{ inputs.min_ready }}"
+          if [ -n "$MIN_READY" ] && [ "$MIN_READY" != "5" ]; then
+            ARGS="$ARGS --min-ready=$MIN_READY"
+          fi
           node scripts/generate-briefs.mjs $ARGS
 
       - name: Commit and push if changed
