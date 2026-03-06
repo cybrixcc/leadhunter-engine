@@ -8,8 +8,17 @@ Each client blog is a standalone Next.js site that calls this engine via GitHub 
 
 ## What it does
 
+**Brief generation**
+Keeps the content queue full automatically. Reads the keyword research doc and existing topics, generates new briefs with Claude when the queue drops below 5 ready topics. Runs daily at 08:00 UTC before article generation.
+
 **Article generation**
 Reads the content plan, researches the topic, writes a fully structured SEO article, and opens it as a Pull Request. The client reviews and merges — no writing required.
+
+**AI article review**
+Every Pull Request with a new article is automatically reviewed for quality, SEO structure, and brand consistency before it goes live. Auto-fixes issues and commits to the PR branch — up to 5 rounds.
+
+**Weekly article audit**
+Every Sunday, scans all published articles for broken internal links, missing required components, desync between blog-data.ts and llms.txt, stale dates, and style violations. Opens a GitHub Issue with a labeled list of findings. Closes the issue automatically when all issues are resolved.
 
 **Google Search Console monitoring**
 Checks which pages are indexed, flags coverage issues, and tracks keyword performance over time.
@@ -19,9 +28,6 @@ Scores how well the site is optimized for AI-powered search (ChatGPT, Perplexity
 
 **Citation research**
 Monitors whether the brand is being cited by AI models and authoritative sources. Tracks competitor mentions for comparison.
-
-**AI article review**
-Every Pull Request with a new article is automatically reviewed for quality, SEO structure, and brand consistency before it goes live.
 
 ---
 

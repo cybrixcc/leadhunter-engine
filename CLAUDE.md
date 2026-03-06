@@ -13,14 +13,19 @@ Shared engine for automated SEO article generation for client blogs. Cloned from
 ## Commands
 
 ```bash
-npm install                          # install deps (Node 22+)
-node scripts/generate-article.mjs   # generate next ready topic
-node scripts/generate-article.mjs --dry-run       # preview without committing
-node scripts/generate-article.mjs --topic=6       # generate specific topic
-node scripts/gsc-index-check.mjs                  # check/submit GSC index
-node scripts/gsc-keyword-performance.mjs          # weekly keyword report
-node scripts/ai-citation-research.mjs             # AI citation research
-bash scripts/geo-health-check.sh                  # GEO content health score
+npm install                                              # install deps (Node 22+)
+node scripts/generate-briefs.mjs                         # generate briefs if queue < 5 ready
+node scripts/generate-briefs.mjs --count=3               # force generate 3 briefs
+node scripts/generate-briefs.mjs --dry-run               # preview without writing files
+node scripts/generate-article.mjs                        # generate next ready topic
+node scripts/generate-article.mjs --dry-run              # preview without committing
+node scripts/generate-article.mjs --topic=6              # generate specific topic
+node scripts/audit-articles.mjs                          # audit all published articles
+node scripts/audit-articles.mjs --blog-glob=src/app/blog # custom blog directory path
+node scripts/gsc-index-check.mjs                         # check/submit GSC index
+node scripts/gsc-keyword-performance.mjs                 # weekly keyword report
+node scripts/ai-citation-research.mjs                    # AI citation research
+bash scripts/geo-health-check.sh                         # GEO content health score
 ```
 
 ## Architecture
@@ -103,10 +108,13 @@ All workflows support `workflow_call` with `config_path` input. They:
 
 | Workflow | Trigger in client |
 |---------|------------------|
-| `generate-article.yml` | schedule or manual, generates articles |
+| `generate-briefs.yml` | daily 08:00 UTC, refills content queue if < 5 ready topics |
+| `generate-article.yml` | daily 09:00 UTC or manual, generates next article |
+| `audit-articles.yml` | weekly (Sundays), audits all published articles |
 | `gsc-index-check.yml` | schedule, submits unindexed pages to GSC |
 | `gsc-keyword-performance.yml` | schedule, weekly keyword report → GitHub issue |
 | `geo-health-check.yml` | schedule, GEO score → GitHub issue |
+| `ai-article-review.yml` | PR trigger, reviews new article PRs with auto-fixes |
 | `ai-article-review.yml` | PR trigger, auto-reviews blog article PRs |
 
 ### Required secrets (in client repo)

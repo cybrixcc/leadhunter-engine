@@ -1,0 +1,8 @@
+# Copy this file to .gitattributes in the client repo root.
+#
+# merge=union prevents conflicts in append-only files when multiple
+# article PRs are open simultaneously. Git merges both sets of lines
+# instead of raising a conflict — safe because these files only grow.
+
+public/llms.txt merge=union
+CONTENT_PLAN.md merge=union

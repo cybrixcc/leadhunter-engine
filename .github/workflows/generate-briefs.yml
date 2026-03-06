@@ -1,0 +1,163 @@
+name: Generate Briefs
+
+# Reusable workflow — keeps the content queue full by auto-generating briefs
+# when the number of "ready" topics drops below the minimum threshold.
+#
+# Designed to run daily at 08:00 UTC — one hour before generate-article.yml.
+#
+# Client usage:
+#   jobs:
+#     generate-briefs:
+#       uses: cybrixcc/leadhunter-engine/.github/workflows/generate-briefs.yml@master
+#       with:
+#         config_path: ./config.yml
+#       secrets: inherit
+
+on:
+  workflow_call:
+    inputs:
+      config_path:
+        description: 'Path to config.yml in the calling repo'
+        required: false
+        default: './config.yml'
+        type: string
+      min_ready:
+        description: 'Minimum number of ready topics to maintain (default: 5)'
+        required: false
+        default: 5
+        type: number
+      force_count:
+        description: 'Force generate this many briefs regardless of queue size (0 = auto)'
+        required: false
+        default: 0
+        type: number
+      dry_run:
+        description: 'Dry run — preview without writing files'
+        required: false
+        default: false
+        type: boolean
+    secrets:
+      ANTHROPIC_API_KEY:
+        required: true
+      GH_PAT:
+        required: false
+      TELEGRAM_BOT_TOKEN:
+        required: false
+      TELEGRAM_CHAT_ID:
+        required: false
+
+  workflow_dispatch:
+    inputs:
+      force_count:
+        description: 'Force generate this many briefs (0 = auto)'
+        required: false
+        default: 0
+        type: number
+      dry_run:
+        description: 'Dry run — preview without writing files'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  generate-briefs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout calling repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Checkout engine
+        uses: actions/checkout@v4
+        with:
+          repository: cybrixcc/leadhunter-engine
+          path: .engine
+          ref: master
+          token: ${{ secrets.GH_PAT }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: .engine/package.json
+
+      - name: Install engine dependencies
+        run: npm ci --prefix .engine
+
+      - name: Load config and set env vars
+        run: |
+          CONFIG="${{ inputs.config_path || './config.yml' }}"
+          if [ -f "$CONFIG" ]; then
+            SITE_NAME=$(grep '^site_name:' "$CONFIG" | sed 's/site_name:\s*//' | tr -d '"' | tr -d "'")
+            GIT_USER_NAME=$(grep '^git_user_name:' "$CONFIG" | sed 's/git_user_name:\s*//' | tr -d '"' | tr -d "'" || echo "Blog Bot")
+            GIT_USER_EMAIL=$(grep '^git_user_email:' "$CONFIG" | sed 's/git_user_email:\s*//' | tr -d '"' | tr -d "'" || echo "bot@example.com")
+            echo "SITE_NAME=${SITE_NAME}" >> $GITHUB_ENV
+            echo "GIT_USER_NAME=${GIT_USER_NAME}" >> $GITHUB_ENV
+            echo "GIT_USER_EMAIL=${GIT_USER_EMAIL}" >> $GITHUB_ENV
+          fi
+
+      - name: Setup Git
+        run: |
+          git config user.name "${GIT_USER_NAME:-Blog Bot}"
+          git config user.email "${GIT_USER_EMAIL:-bot@example.com}"
+
+      - name: Copy engine scripts
+        run: cp -r .engine/scripts ./scripts
+
+      - name: Generate briefs
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          ARGS=""
+          if [ "${{ inputs.dry_run }}" = "true" ]; then ARGS="--dry-run"; fi
+          if [ "${{ inputs.force_count }}" != "0" ] && [ -n "${{ inputs.force_count }}" ]; then
+            ARGS="$ARGS --count=${{ inputs.force_count }}"
+          fi
+          MIN_READY="${{ inputs.min_ready }}"
+          if [ -n "$MIN_READY" ] && [ "$MIN_READY" != "5" ]; then
+            ARGS="$ARGS --min-ready=$MIN_READY"
+          fi
+          node scripts/generate-briefs.mjs $ARGS
+
+      - name: Commit and push if changed
+        if: inputs.dry_run != true
+        run: |
+          git add docs/briefs/ CONTENT_PLAN.md
+          if git diff --staged --quiet; then
+            echo "No new briefs generated — queue already full."
+          else
+            ADDED=$(git diff --staged --name-only | grep 'docs/briefs/' | wc -l | tr -d ' ')
+            git commit -m "chore: auto-generate ${ADDED} brief(s) to refill content queue"
+            git pull --rebase origin $(git branch --show-current)
+            git push origin $(git branch --show-current)
+            echo "BRIEFS_ADDED=${ADDED}" >> $GITHUB_ENV
+          fi
+
+      - name: Send Telegram notification
+        if: env.BRIEFS_ADDED != '' && secrets.TELEGRAM_BOT_TOKEN != ''
+        run: |
+          LABEL="${SITE_NAME:-Blog}"
+          MESSAGE="${LABEL}: ${BRIEFS_ADDED} new brief(s) added to content queue"
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d text="$MESSAGE" \
+            > /dev/null
+
+      - name: Send failure notification
+        if: failure()
+        run: |
+          if [ -n "${{ secrets.TELEGRAM_BOT_TOKEN }}" ] && [ -n "${{ secrets.TELEGRAM_CHAT_ID }}" ]; then
+            LABEL="${SITE_NAME:-Blog}"
+            MESSAGE="${LABEL}: Brief generation failed. Check Actions: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+              -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+              -d text="$MESSAGE" \
+              > /dev/null
+          fi
