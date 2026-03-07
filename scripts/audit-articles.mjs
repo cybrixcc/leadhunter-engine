@@ -165,10 +165,14 @@ for (const slug of slugs) {
     issue("WARN", filePath, `ArticleAuthor is missing the date prop`);
   }
 
-  // 4f. Emoji in visible JSX text (style violation)
-  // Only flag emoji inside JSX string literals (between > and <), not in JS code/data
-  if (/>[^<]*[\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}][^<]*</u.test(content)) {
-    issue("WARN", filePath, `Contains emoji in visible content — style violation`);
+  // 4f. Emoji mixed into prose text (style violation)
+  // Only flag pictograph emoji (U+1F300-U+1F9FF) on the same line as words.
+  // Text symbols like ✓ ✗ ⚠ ★ (U+2600-U+27BF) are legitimate list/content markers.
+  // Pure decorative spans like <span>💡</span> are intentional design — not flagged.
+  // Using [^\n<] to avoid cross-line matches (otherwise [^<] matches newlines).
+  if (/>[^\n<]*\w[^\n<]*[\u{1F300}-\u{1F9FF}][^\n<]*\w[^\n<]*</u.test(content) ||
+      />[^\n<]*[\u{1F300}-\u{1F9FF}][^\n<]*\w{3,}[^\n<]*</u.test(content)) {
+    issue("WARN", filePath, `Contains emoji mixed into prose text — style violation`);
   }
 
   // 4g. Stale year: only mentions a past year, no current year
