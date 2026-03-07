@@ -141,14 +141,16 @@ jobs:
           fi
 
       - name: Send Telegram notification
-        if: env.BRIEFS_ADDED != '' && secrets.TELEGRAM_BOT_TOKEN != ''
+        if: env.BRIEFS_ADDED != ''
         run: |
-          LABEL="${SITE_NAME:-Blog}"
-          MESSAGE="${LABEL}: ${BRIEFS_ADDED} new brief(s) added to content queue"
-          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
-            -d text="$MESSAGE" \
-            > /dev/null
+          if [ -n "${{ secrets.TELEGRAM_BOT_TOKEN }}" ] && [ -n "${{ secrets.TELEGRAM_CHAT_ID }}" ]; then
+            LABEL="${SITE_NAME:-Blog}"
+            MESSAGE="${LABEL}: ${BRIEFS_ADDED} new brief(s) added to content queue"
+            curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+              -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+              -d text="$MESSAGE" \
+              > /dev/null
+          fi
 
       - name: Send failure notification
         if: failure()

@@ -172,12 +172,14 @@ jobs:
             }
 
       - name: Send Telegram notification on errors
-        if: steps.audit.outcome == 'failure' && secrets.TELEGRAM_BOT_TOKEN != ''
+        if: steps.audit.outcome == 'failure'
         run: |
-          LABEL="${SITE_NAME:-Blog}"
-          ISSUES_URL="https://github.com/${{ github.repository }}/issues?q=label%3Aaudit+is%3Aopen"
-          MESSAGE="${LABEL} audit found issues. Review: ${ISSUES_URL}"
-          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
-            -d text="$MESSAGE" \
-            > /dev/null
+          if [ -n "${{ secrets.TELEGRAM_BOT_TOKEN }}" ] && [ -n "${{ secrets.TELEGRAM_CHAT_ID }}" ]; then
+            LABEL="${SITE_NAME:-Blog}"
+            ISSUES_URL="https://github.com/${{ github.repository }}/issues?q=label%3Aaudit+is%3Aopen"
+            MESSAGE="${LABEL} audit found issues. Review: ${ISSUES_URL}"
+            curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+              -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+              -d text="$MESSAGE" \
+              > /dev/null
+          fi
