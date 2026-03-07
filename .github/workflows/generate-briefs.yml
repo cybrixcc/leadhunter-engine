@@ -108,9 +108,6 @@ jobs:
           git config user.name "${GIT_USER_NAME:-Blog Bot}"
           git config user.email "${GIT_USER_EMAIL:-bot@example.com}"
 
-      - name: Copy engine scripts
-        run: cp -r .engine/scripts ./scripts
-
       - name: Generate briefs
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -124,7 +121,7 @@ jobs:
           if [ -n "$MIN_READY" ] && [ "$MIN_READY" != "5" ]; then
             ARGS="$ARGS --min-ready=$MIN_READY"
           fi
-          node scripts/generate-briefs.mjs $ARGS
+          node .engine/scripts/generate-briefs.mjs $ARGS
 
       - name: Commit and push if changed
         if: inputs.dry_run != true

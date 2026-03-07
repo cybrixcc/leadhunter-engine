@@ -73,13 +73,10 @@ jobs:
             echo "SITE_NAME=${SITE_NAME}" >> $GITHUB_ENV
           fi
 
-      - name: Copy engine scripts
-        run: cp -r .engine/scripts ./scripts
-
       - name: Run article audit
         id: audit
         run: |
-          node scripts/audit-articles.mjs \
+          node .engine/scripts/audit-articles.mjs \
             --blog-glob="${{ inputs.blog_glob || 'src/app/blog' }}"
           echo "exit_code=0" >> $GITHUB_OUTPUT
         continue-on-error: true
