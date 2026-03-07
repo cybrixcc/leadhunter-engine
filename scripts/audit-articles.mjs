@@ -27,6 +27,14 @@ const BLOG_DIR =
 const BLOG_DATA_PATH = "src/lib/blog-data.ts";
 const LLMS_TXT_PATH = "public/llms.txt";
 
+// Read site_url from config.yml if present
+let SITE_URL = "";
+try {
+  const configRaw = fs.readFileSync("config.yml", "utf8");
+  const match = configRaw.match(/^site_url:\s*["']?([^"'\n]+)["']?/m);
+  if (match) SITE_URL = match[1].trim().replace(/\/$/, "");
+} catch (_) {}
+
 const issues = [];
 
 function issue(severity, file, message) {
@@ -122,22 +130,23 @@ for (const slug of slugs) {
     }
   }
 
-  // 4c. Hardcoded absolute domain in hrefs (should use relative paths)
+  // 4c. Hardcoded absolute own-domain URLs in hrefs (should be relative paths)
   for (const match of content.matchAll(
     /href=["'](https?:\/\/[^"']+)["']/g
   )) {
     const url = match[1];
-    // Flag internal-looking URLs that should be relative
+    // Only flag URLs pointing to the site's own domain with /blog/ path
+    // External citations and source links to other domains are fine
+    const siteUrl = SITE_URL;
     if (
-      url.includes("/blog/") &&
-      !url.startsWith("https://schema.org") &&
-      !url.startsWith("https://twitter") &&
-      !url.startsWith("https://linkedin")
+      siteUrl &&
+      url.startsWith(siteUrl) &&
+      url.includes("/blog/")
     ) {
       issue(
         "WARN",
         filePath,
-        `Hardcoded absolute URL in href — consider using relative path: ${url}`
+        `Hardcoded absolute own-domain URL — use relative path: ${url}`
       );
     }
   }
@@ -156,9 +165,10 @@ for (const slug of slugs) {
     issue("WARN", filePath, `ArticleAuthor is missing the date prop`);
   }
 
-  // 4f. Emoji in content (style violation)
-  if (/[\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}]/u.test(content)) {
-    issue("WARN", filePath, `Contains emoji — style violation`);
+  // 4f. Emoji in visible JSX text (style violation)
+  // Only flag emoji inside JSX string literals (between > and <), not in JS code/data
+  if (/>[^<]*[\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}][^<]*</u.test(content)) {
+    issue("WARN", filePath, `Contains emoji in visible content — style violation`);
   }
 
   // 4g. Stale year: only mentions a past year, no current year
