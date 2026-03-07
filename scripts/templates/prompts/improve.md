@@ -33,7 +33,8 @@ All URLs and analytics events MUST use this exact slug:
 ## Improvement Instructions
 
 1. **Only fix the listed issues** - don't make unrelated changes
-2. **Preserve the structure** - keep sections, imports, and patterns intact
+2. **NO EMOJI** - Do not add or keep any emoji anywhere in the article. Remove any that exist.
+3. **Preserve the structure** - keep sections, imports, and patterns intact
 3. **Add missing content** - if key points are missing, add them as new sections or expand existing ones
 4. **Fix uncited statistics** - either cite them properly or remove them
 5. **Add internal links** - integrate them naturally in the text where relevant

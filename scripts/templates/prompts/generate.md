@@ -89,6 +89,7 @@ import { ArticleAuthor } from "@/components/ArticleAuthor";
 6. **Use proper attribution**: Cite sources inline when using statistics
 7. **Data consistency**: CRITICAL - if you create data arrays (comparisons, stats), any summary text MUST match the actual data. Example: if you have 4 items with winner="A" and 4 with winner="B", don't say "A wins 6/8"
 8. **NO UNSUBSTANTIATED STATISTICS IN SEO ELEMENTS**: NEVER put specific numbers/percentages in metadata title, description, openGraph title, or H1 unless they come from Sources. If no sources, use qualitative language: "higher response rates", "more effective", "better results" — NOT "85% more replies" or "3x better"
+9. **NO EMOJI**: Do NOT use emoji anywhere in the article — not in headings, body text, badges, bullet points, or JSX. Text only. This is a strict style requirement.
 
 ### Umami Tracking (CRITICAL: Use exact slug)
 The generated slug for this article is: `{{SLUG}}`
@@ -117,6 +118,7 @@ DO NOT generate your own slug from the title. Use `{{SLUG}}` exactly as provided
 - [ ] 3+ internal links to EXISTING pages (from list above - DO NOT invent URLs!)
 - [ ] LeadHunter mentioned 2-3 times naturally
 - [ ] No made-up statistics (only from sources)
+- [ ] No emoji anywhere in the article
 
 **Structure**
 - [ ] Hero section with Badge, ArticleAuthor, H1, intro, CTA
